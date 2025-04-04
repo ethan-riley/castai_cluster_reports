@@ -69,7 +69,7 @@ org,key,org_id
 Your Organization Name,your-api-key,your-org-id
 ```
 
-like in the orgs.csv.example file. The no existanse of this file, can make the scripts to fail.
+like in the orgs.csv.example file. The no existanse of this file, will make the scripts to fail.
 
 ## Usage
 
