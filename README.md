@@ -4,7 +4,7 @@ A collection of Python scripts for managing and analyzing cluster resources, usa
 
 ## Overview
 
-This repository contains a set of Python scripts designed to analyze and report on Kubernetes cluster resource usage, efficiency, and cost optimization opportunities. The scripts interact with the CAST.AI API to collect data about clusters, nodes, and resource allocation.
+This repository contains a set of Python scripts designed to analyze and report on Kubernetes cluster resource usage, efficiency, and cost optimization opportunities. The scripts interact with the CastAI API to collect data about clusters, nodes, and resource allocation.
 
 ## Scripts
 
@@ -40,7 +40,7 @@ Creates comprehensive reports on cost savings and resource usage including:
 
 ### Prerequisites
 
-- Python 3.6+
+- Python 3.10+
 - pandas
 - requests
 
@@ -56,12 +56,20 @@ cd cluster-resource-tools
 ```bash
 pip install -r requirements.txt
 ```
+If that fails, create a Virtual Environment:
+```bash
+python3 -m venv ./venv/
+```
+And then try to install requirements again.
+
 
 3. Create an `orgs.csv` file with your organization information:
 ```
 org,key,org_id
 Your Organization Name,your-api-key,your-org-id
 ```
+
+like in the orgs.csv.example file. The no existanse of this file, can make the scripts to fail.
 
 ## Usage
 
@@ -70,8 +78,6 @@ Your Organization Name,your-api-key,your-org-id
 ```bash
 python orgClusterDetails.py <Organization Name | all> [on]
 ```
-- Use `all` to process all organizations in your orgs.csv
-- Add `on` at the end to save the raw JSON responses
 
 ### Generate Monthly CPU Report
 
@@ -84,6 +90,11 @@ python monthlyClusterCPUReport.py <Organization Name | all> [on]
 ```bash
 python monthlySavingsReport.py <Organization Name | all> [on]
 ```
+
+### Arguments
+
+- Use `all` to process all organizations in your orgs.csv
+- Add `on` at the end to save the raw JSON responses
 
 ## Output
 
@@ -114,4 +125,4 @@ GNU/GPLv3
 
 ## Acknowledgements
 
-This project uses the CAST.AI API for collecting cluster resource data and optimization metrics.
+This project uses the CastAI API for collecting cluster resource data and optimization metrics.
