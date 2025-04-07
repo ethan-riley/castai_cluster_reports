@@ -7,6 +7,7 @@ import requests
 import pandas as pd
 import datetime
 import json
+import math
 import statistics
 
 # -------------------------
@@ -299,6 +300,37 @@ def get_nodes_managed(api_key, cluster_id, provider_name):
     # print(result_parts)
     return "; ".join(result_parts)
 
+def get_cpu_count(api_key, cluster_id):
+    """
+    Returns the total CPU capacity (in millicores) provided by all nodes in the cluster.
+    It uses the external-clusters nodes endpoint and sums up the value of 
+    resource.cpuCapacityMilli for each node.
+    """
+    url = f"https://api.cast.ai/v1/kubernetes/external-clusters/{cluster_id}/nodes?nodeStatus=node_status_unspecified&lifecycleType=lifecycle_type_unspecified"
+    headers = {"X-API-Key": api_key, "accept": "application/json"}
+    resp = requests.get(url, headers=headers)
+    try:
+        data = resp.json()
+    except Exception as e:
+        print(f"Error decoding nodes for cluster {cluster_id}: {e}", flush=True)
+        data = {}
+    # Save the JSON response if needed
+    os.makedirs(os.path.join(org_dir, "json"), exist_ok=True)
+    if save_json == "on":
+        file_path = os.path.join(org_dir, "json", f"nodes_{cluster_id}.json")
+        with open(file_path, "w") as f:
+            json.dump(data, f, indent=4)
+    total_cpu = 0.0
+    for node in data.get("items", []):
+        try:
+            cpu = float(node.get("resources", {}).get("cpuCapacityMilli", 0))
+        except Exception as e:
+            print(f"Error processing cpuCapacityMilli for node in cluster {cluster_id}: {e}", flush=True)
+            cpu = 0.0
+        total_cpu += cpu
+    total_cpu = total_cpu/1000
+    total_cpu = round(total_cpu, None)
+    return total_cpu
 
 def extract_cluster_info(cluster_id, details, offerings, api_key, schedule_map):
     info = {}
@@ -371,6 +403,7 @@ def extract_cluster_info(cluster_id, details, offerings, api_key, schedule_map):
         info["Region"] = regionlabels.get("name")
     else:
         info["Region"] = "Unknown"
+    info["CPU Count"] = get_cpu_count(api_key,cluster_id)
     return info
 
 def get_all_rebalancing_schedules(api_key):
@@ -447,7 +480,7 @@ def fetch_cluster_info(api_key, org_id):
     cols = ["ClusterID", "Cluster Name", "Provider", "Region", "Phase 1", "Phase 2", "WOOP Enabled",
             "Resource Offering", "First Rebalance", "Special Considerations", "Connected Date",
             "Environment", "Evictor", "Scheduled Rebalance", "Node Templates Review",
-            "WOOP enabled %", "Kubernetes version", "KarpenterInstalled", "Nodes Managed"]
+            "WOOP enabled %", "Kubernetes version", "KarpenterInstalled", "CPU Count", "Nodes Managed"]
     df = df.reindex(columns=cols)
     csv_path = os.path.join(org_dir, "csv", "cluster_details.csv")
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
