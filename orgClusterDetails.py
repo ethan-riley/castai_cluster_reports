@@ -398,12 +398,29 @@ def extract_cluster_info(cluster_id, details, offerings, api_key, schedule_map):
     #Get Region
     if provider.lower() == "anywhere":
         info["Region"] = get_anywhere_region(api_key, cluster_id)
-    elif provider.lower() == "eks" and "gke" and "aks":
+    elif provider.lower() == "eks" or "gke" or "aks":
         regionlabels = details.get("region")
         info["Region"] = regionlabels.get("name")
     else:
         info["Region"] = "Unknown"
     info["CPU Count"] = get_cpu_count(api_key,cluster_id)
+
+    # Get Account ID or name
+    if provider.lower() == "anywhere":
+        info["accoundID"] = "Unknown"
+    elif provider.lower() == "eks":
+        providerlabels = details.get(provider.lower())
+        info["accountID"] = providerlabels.get("accountId")    
+    elif provider.lower() == "gke":
+        providerlabels = details.get(provider.lower())
+        info["accountID"] = providerlabels.get("projectId")
+    elif provider.lower() == "aks":
+        providerlabels = details.get(provider.lower())
+        info["accountID"] = providerlabels.get("nodeResourceGroup")
+    else:
+        info["accountID"] = "Unknown"
+    info["CPU Count"] = get_cpu_count(api_key,cluster_id)   
+
     return info
 
 def get_all_rebalancing_schedules(api_key):
@@ -477,7 +494,7 @@ def fetch_cluster_info(api_key, org_id):
     df = pd.DataFrame(all_cluster_info)
     df["Connected Date"] = pd.to_datetime(df["Connected Date"], errors='coerce')
     df.sort_values(by="Connected Date", inplace=True)
-    cols = ["ClusterID", "Cluster Name", "Provider", "Region", "Phase 1", "Phase 2", "WOOP Enabled",
+    cols = ["ClusterID", "Cluster Name", "Provider", "accountID", "Region", "Phase 1", "Phase 2", "WOOP Enabled",
             "Resource Offering", "First Rebalance", "Special Considerations", "Connected Date",
             "Environment", "Evictor", "Scheduled Rebalance", "Node Templates Review",
             "WOOP enabled %", "Kubernetes version", "KarpenterInstalled", "CPU Count", "Nodes Managed"]
