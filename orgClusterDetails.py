@@ -2,17 +2,177 @@
 import os
 import sys
 import re
-from xml.dom.minidom import Attr
+#from xml.dom.minidom import Attr
 import requests
 import pandas as pd
 import datetime
 import json
-import math
 import statistics
 
 # -------------------------
 # Helper Functions
 # -------------------------
+def getKnownAnywhere(cluster_id, api_key):
+    url = f"https://api.cast.ai/v1/kubernetes/external-clusters/{cluster_id}/nodes?nodeStatus=node_status_unspecified&lifecycleType=lifecycle_type_unspecified"
+    headers = {"X-API-Key": api_key, "accept": "application/json"}
+    respuesta = requests.get(url, headers=headers)
+    try:
+        datados = respuesta.json()
+    except Exception as e:
+        print(f"Error decoding data for cluster {cluster_id}: {e}", flush=True)
+        datados = {}
+    items = datados.get("items", [])
+    total_nodes = len(items)
+
+    if total_nodes == 0:
+        return "Unknown"
+    for item in items:
+        name = item.get("name", {})
+        if "fargate" in name:
+            return "fargate"
+        else:
+            return "Unknown"
+    
+def getFargateVersion(cluster_id, api_key):
+    url = f"https://api.cast.ai/v1/kubernetes/external-clusters/{cluster_id}/nodes?nodeStatus=node_status_unspecified&lifecycleType=lifecycle_type_unspecified"
+    headers = {"X-API-Key": api_key, "accept": "application/json"}
+    respuesta = requests.get(url, headers=headers)
+    try:
+        datados = respuesta.json()
+    except Exception as e:
+        print(f"Error decoding data for cluster {cluster_id}: {e}", flush=True)
+        datados = {}
+    items = datados.get("items", [])
+    total_nodes = len(items)
+
+    if total_nodes == 0:
+        version =  "Unknown"
+    version = 1.32
+    for item in items:
+        labels = item.get("nodeInfo", {})
+        version_str = labels["kubeletVersion"]
+        version_new = simplify_version("anywhere", version_str)
+        fvn = float(version_new)
+        fv = float(version)
+        if fvn <= fv:
+           fv = fvn
+    return fv
+
+def simplify_version(provider, version_str):
+    if provider.lower() == "eks":
+        parts = version_str.split(".")
+        return ".".join(parts[:2])
+    elif provider.lower() == "gke":
+        return ".".join(version_str.split("-")[0].split(".")[:2])
+    elif provider.lower() == "aks":
+        parts = version_str.split(".")
+        return ".".join(parts[:2])
+    elif provider.lower() == "anywhere":
+        if version_str.startswith("v"):
+            version_str = version_str[1:]
+        # Split on "-" to get the version portion
+        version_part = version_str.split("-")[0]
+        # Split the version portion on "." and join the first two parts
+        parts = version_part.split(".")
+        return ".".join(parts[:2])
+
+def get_extended_support_data(provider):
+    """
+    Fetch the extended support data from endoflife.date for the given provider.
+    For each provider the API returns a list of version objects. Each version object contains:
+      • For EKS: 'cycle' (version), 'eol' (standard support end), 'extendedSupport' (extended support end)
+      • For GKE: 'cycle', 'support' (standard support end), 'eol' (extended support end)
+      • For AKS: 'cycle', 'eol' (standard support end), 'lts' (extended support end, if available)
+    Returns the list of version objects (or an empty list on error).
+    """
+    endpoints = {
+        "EKS": "https://endoflife.date/api/amazon-eks.json",
+        "GKE": "https://endoflife.date/api/google-kubernetes-engine.json",
+        "AKS": "https://endoflife.date/api/azure-kubernetes-service.json"
+    }
+    #print(provider)
+    #print(provider.upper())
+    url = endpoints.get(provider.upper())
+    if not url:
+        print(f"No endpoint defined for provider {provider}")
+        return []
+    try:
+        resp = requests.get(url, headers={"Accept": "application/json"})
+        data = resp.json()
+    except Exception as e:
+        print(f"Error fetching extended support data for {provider}: {e}")
+        data = []
+    return data
+
+def determine_support_status(provider, version_str, support_data=None):
+    """
+    Determines if the given version is in standard support, extended support, or EOL.
+    
+    For provider:
+      - EKS: uses 'eol' for standard support end and 'extendedSupport' for extended support end.
+      - GKE: uses 'support' for standard support end and 'eol' for extended support end.
+      - AKS: uses 'eol' for standard support end and 'lts' for extended support end.
+    
+    The function simplifies the input version (e.g. "1.31.6" becomes "1.31") and searches
+    the support data for a matching version (comparing also in simplified form). Then, using the
+    current date, it returns:
+         "Standard" if today is on or before the standard support end date,
+         "Extended" if today is after standard support but on or before extended support end date,
+         "EOL" if today is after the extended support end date.
+    If no match is found, it returns "Version not found" or "Unknown" if dates are missing.
+    
+    Optionally, you can pass pre-fetched support_data (a list of version objects) for the given provider.
+    """
+    from datetime import date, datetime
+    simple_version = simplify_version(provider, version_str)
+    
+    # If no support data is provided, fetch it
+    if support_data is None:
+        support_data = get_extended_support_data(provider)
+    
+    # Iterate over each version object
+    for item in support_data:
+        cycle = item.get("cycle", "")
+        simple_cycle = simplify_version(provider, cycle)
+        if simple_cycle == simple_version:
+            # For EKS, use 'eol' and 'extendedSupport'
+            if provider.lower() == "eks":
+                std_date_str = item.get("eol", "")
+                ext_date_str = item.get("extendedSupport", "")
+            # For GKE, use 'support' and 'eol'
+            elif provider.lower() == "gke":
+                std_date_str = item.get("support", "")
+                ext_date_str = item.get("eol", "")
+            # For AKS, use 'eol' and 'lts'
+            elif provider.lower() == "aks":
+                std_date_str = item.get("eol", "")
+                ext_date_str = item.get("lts", "")
+            else:
+                std_date_str = ""
+                ext_date_str = ""
+            
+            try:
+                std_date = datetime.fromisoformat(std_date_str).date() if std_date_str else None
+            except Exception as e:
+                print(f"Error parsing standard support date '{std_date_str}': {e}")
+                std_date = None
+            try:
+                ext_date = datetime.fromisoformat(ext_date_str).date() if ext_date_str else None
+            except Exception as e:
+                print(f"Error parsing extended support date '{ext_date_str}': {e}")
+                ext_date = None
+                
+            today = date.today()
+            if std_date and today <= std_date:
+                return "No"
+            elif std_date and ext_date and std_date < today <= ext_date:
+                return "Yes"
+            elif ext_date and today > ext_date:
+                return "Not Supported (EOL)"
+            else:
+                return "Unknown"
+    return "Version not found"
+
 def get_cluster_ids(api_key, org_id):
     print("Getting Organization Clusters", flush=True)
     url = "https://api.cast.ai/v1/cost-reports/organization/clusters/summary"
@@ -383,7 +543,28 @@ def extract_cluster_info(cluster_id, details, offerings, api_key, schedule_map):
     
     info["Node Templates Review"] = details.get("nodeTemplatesReview", "")
     info["WOOP enabled %"] = get_woop_enabled_percent(api_key, cluster_id)
-    info["Kubernetes version"] = details.get("kubernetesVersion", "")
+    k8sVersion = details.get("kubernetesVersion", "")
+    if provider.lower() == "eks":
+        info["Kubernetes version"] = k8sVersion
+        info["Extended Support"] = determine_support_status(provider, k8sVersion)
+    elif provider.lower() == "gke":
+        gkeVersion = ".".join(k8sVersion.split("-")[0].split(".")[:2])
+        info["Kubernetes version"] = gkeVersion
+        info["Extended Support"] = determine_support_status(provider, gkeVersion)
+    elif provider.lower() == "aks":
+        parts = k8sVersion.split(".")
+        aksVersion = ".".join(parts[:2])
+        info["Kubernetes version"] = aksVersion
+        info["Extended Support"] = determine_support_status(provider, aksVersion)
+    elif provider.lower() == "anywhere":
+        av = getFargateVersion(cluster_id, api_key)
+        info["Kubernetes version"] = av
+        k8sversion=str(av)
+        knownAnywhere = getKnownAnywhere(cluster_id, api_key)
+        if knownAnywhere == "fargate":
+            info["Extended Support"] = determine_support_status("eks", k8sversion)
+        else:
+            info["Extended Support"] = "Not Apply"
     
     settings = get_cluster_settings(api_key, cluster_id)
     karp_val = settings.get("karpenterInstalled", False)
@@ -419,7 +600,7 @@ def extract_cluster_info(cluster_id, details, offerings, api_key, schedule_map):
         info["accountID"] = providerlabels.get("nodeResourceGroup")
     else:
         info["accountID"] = "Unknown"
-    info["CPU Count"] = get_cpu_count(api_key,cluster_id)   
+    info["CPU Count"] = get_cpu_count(api_key,cluster_id) 
 
     return info
 
@@ -497,7 +678,7 @@ def fetch_cluster_info(api_key, org_id):
     cols = ["ClusterID", "Cluster Name", "Provider", "Region", "Phase 1", "Phase 2", "WOOP Enabled",
             "Resource Offering", "First Rebalance", "Special Considerations", "Connected Date",
             "Environment", "Evictor", "Scheduled Rebalance", "Node Templates Review",
-            "WOOP enabled %", "Kubernetes version", "KarpenterInstalled", "CPU Count",  "accountID", "Nodes Managed"]
+            "WOOP enabled %", "Kubernetes version", "Extended Support", "KarpenterInstalled", "CPU Count",  "accountID", "Nodes Managed"]
     df = df.reindex(columns=cols)
     csv_path = os.path.join(org_dir, "csv", "cluster_details.csv")
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
