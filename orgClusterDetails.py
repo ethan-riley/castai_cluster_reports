@@ -317,9 +317,9 @@ def get_woop_enabled_percent(api_key, cluster_id):
 
 def detect_environment(cluster_name, tag_env=""):
     name = cluster_name.lower()
-    prod_patterns = [r'\bprod\b', r'\bproduction\b', r'\bprd\b', r'\bproduccion\b', r'\bp\b', r'\bpd\b']
-    staging_patterns = [r'\bqa\b', r'\bqas\b', r'\buat\b', r'\bquality[- ]?assurance\b', r'\bqat\b', r'\bq\b', r'\btest\b', r'\bstaging\b']
-    dev_patterns = [r'\bdev\b', r'\bdesa\b', r'\bdv\b', r'\bde\b', r'\bdevelopment\b', r'\bdesarrollo\b', r'\bdes\b']
+    prod_patterns = [r'\bprod\b', r'\bproduction\b', r'\bprd\b', r'\bproduccion\b', r'\bp\b', r'\bpd\b', r'\b-p-\b', r'\b-prd\b']
+    staging_patterns = [r'\bqa\b', r'\b-qa\b', r'\bqas\b', r'\buat\b', r'\bquality[- ]?assurance\b', r'\bqat\b', r'\bq\b', r'\btest\b', r'\bstaging\b', r'\bqa[0-9]\b', r'\b-q-\b']
+    dev_patterns = [r'\bdev\b', r'\bdesa\b', r'\bdv\b', r'\bde\b', r'\bdevelopment\b', r'\bdesarrollo\b', r'\bdes\b', r'\bdev[0-9]\b', r'\b-d-\b']
     integration_patthers = [r'\bcd\b', r'\bci\b', r'\bargo\b', r'\bjenkins\b']
     for pattern in prod_patterns:
         if re.search(pattern, name, re.IGNORECASE):
