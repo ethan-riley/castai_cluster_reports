@@ -494,10 +494,10 @@ def fetch_cluster_info(api_key, org_id):
     df = pd.DataFrame(all_cluster_info)
     df["Connected Date"] = pd.to_datetime(df["Connected Date"], errors='coerce')
     df.sort_values(by="Connected Date", inplace=True)
-    cols = ["ClusterID", "Cluster Name", "Provider", "accountID", "Region", "Phase 1", "Phase 2", "WOOP Enabled",
+    cols = ["ClusterID", "Cluster Name", "Provider", "Region", "Phase 1", "Phase 2", "WOOP Enabled",
             "Resource Offering", "First Rebalance", "Special Considerations", "Connected Date",
             "Environment", "Evictor", "Scheduled Rebalance", "Node Templates Review",
-            "WOOP enabled %", "Kubernetes version", "KarpenterInstalled", "CPU Count", "Nodes Managed"]
+            "WOOP enabled %", "Kubernetes version", "KarpenterInstalled", "CPU Count",  "accountID", "Nodes Managed"]
     df = df.reindex(columns=cols)
     csv_path = os.path.join(org_dir, "csv", "cluster_details.csv")
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
